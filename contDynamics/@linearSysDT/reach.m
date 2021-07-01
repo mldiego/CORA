@@ -25,31 +25,34 @@ function [R,res] = reach(obj,params,options,varargin)
 % Written:       26-June-2019
 % Last update:   08-Oct-2019
 %                23-April-2020 (restructure params/options)
+%                07-December-2020 (fix wrong indexing)
 % Last revision: ---
 
 
 %------------- BEGIN CODE --------------
 
-    res = 1;
-
+    % safety property check
+    res = true;
+    
     % options preprocessing
     options = params2options(params,options);
     options = checkOptionsReach(obj,options);
-    
+
+    % specification
     spec = [];
     if nargin >= 4
-       spec = varargin{1}; 
+    	spec = varargin{1}; 
     end
-
-    %if a trajectory should be tracked
+    
+    % if a trajectory should be tracked
     if isfield(options,'uTransVec')
         options.uTrans = options.uTransVec(:,1);
     end
 
-    %time period
+    % time period
     tVec = options.tStart:obj.dt:options.tFinal;
 
-    % initialize parameter for the output equation
+    % initialize parameters for the output equation
     [C,D,k] = initOutputEquation(obj,options);
     Rout = cell(length(tVec)-1,1);
 
@@ -60,29 +63,7 @@ function [R,res] = reach(obj,params,options,varargin)
     Rnext.tp = options.R0;
 
     % loop over all reachability steps
-    for i = 2:length(tVec)-1
-
-        % compute output set
-        Rout{i-1} = outputSet(C,D,k,Rnext,options);
-
-        % safety property check
-        if ~isempty(spec)
-            if ~check(options.specification,Rout{i-1})
-                % violation
-                timePoint.set = Rout(1:i-1);
-                timePoint.time = num2cell(tVec(2:i)');
-                R = reachSet(timePoint);
-                res = false;
-                return
-            end
-        end
-
-        % if a trajectory should be tracked
-        if isfield(options,'uTransVec')
-            options.uTrans = options.uTransVec(:,i);
-            % update input set
-            Uadd = obj.B*(options.U + options.uTrans);
-        end
+    for i = 1:length(tVec)-1
 
         % write results to reachable set struct Rnext
         if isempty(obj.c)
@@ -90,18 +71,29 @@ function [R,res] = reach(obj,params,options,varargin)
         else
             Rnext.tp = obj.A*Rnext.tp + Uadd + obj.c;
         end
-    end
-
-    Rout{end} = outputSet(C,D,k,Rnext,options);
-
-    % safety property check
-    res = true;
-
-    if ~isempty(spec)
-        if ~check(options.specification,Rout{end})
-            % violation, but no reduction in cell size of Rout
-            res = false;
+        
+        % if a trajectory should be tracked
+        if isfield(options,'uTransVec')
+            options.uTrans = options.uTransVec(:,i+1);
+            % update input set
+            Uadd = obj.B*(options.U + options.uTrans);
         end
+        
+        % compute output set
+        Rout{i} = outputSet(C,D,k,Rnext,options);
+
+        % safety property check
+        if ~isempty(spec)
+            if ~check(spec,Rout{i})
+                % violation
+                timePoint.set = Rout(1:i);
+                timePoint.time = num2cell(tVec(2:i+1)');
+                R = reachSet(timePoint);
+                res = false;
+                return
+            end
+        end
+        
     end
 
     % construct reachable set object
