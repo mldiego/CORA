@@ -49,7 +49,7 @@ if ~isempty(G)
     if nrOfGens>d*order
 
         %compute metric of generators
-        h = vecnorm(G,1) - vecnorm(G,inf);
+        h = vecnorm(G,1,1) - vecnorm(G,Inf,1);
 
         %number of generators that are not reduced
         nUnreduced = floor(d*(order-1));
